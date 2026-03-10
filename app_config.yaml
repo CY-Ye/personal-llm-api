@@ -4,17 +4,17 @@ database:
   # 数据库类型，可选 sqlite \ mysql
   # - sqlite: 使用 SQLite 数据库，需要指定 db_path
   # - mysql: 使用 MySQL 数据库，需要指定 host, port, user, password, database
-  use_db: sqlite
+  use_db: mysql
 
   sqlite:
     db_path: ./data/llm.db
 
   mysql:
-    host: 127.0.0.1
+    host: 192.168.10.22
     port: 3306
     user: root
-    password: 123
-    database: db
+    password: "123456"
+    database: llm-api
 
 # 代理设置，用于访问国外大模型服务
 proxy:
