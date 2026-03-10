@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic_core import ValidationError
 
-from init import init_db, init_models, get_model
+from init import init_db, init_models, get_model, MODELS_OBJ
 from config import settings
 from utils.db_client import db_client
 from backend.backend_api import backend_router
@@ -185,6 +185,58 @@ def validate_chat_params(params: dict):
 
 
 # 定义路由和视图函数
+@app.get('/v1/models')
+@app.get('/models')
+async def list_models(request: Request):
+    # 校验key
+    api_key = request.headers.get('Authorization')
+    await check_api_key(api_key)
+    
+    # 获取所有唯一模型名称
+    unique_models = set()
+    for model_name in MODELS_OBJ['models_dict'].keys():
+        # 排除重复的model_id和model_name，只保留用户可见的模型名称
+        # 避免同时返回model_name和model_id导致重复
+        if ':' in model_name and model_name.endswith(':online'):
+            # 保留OpenRouter的在线模型
+            unique_models.add(model_name)
+        elif not any(model_name == m.split(':')[0] for m in unique_models if m.endswith(':online')):
+            unique_models.add(model_name)
+    
+    # 构造OpenAI标准响应格式
+    models = []
+    for model_name in sorted(unique_models):
+        models.append({
+            "id": model_name,
+            "object": "model",
+            "created": 1677610602,  # 固定时间戳，符合OpenAI格式
+            "owned_by": "personal-llm",
+            "permission": [
+                {
+                    "id": "modelperm-" + model_name,
+                    "object": "model_permission",
+                    "created": 1677610602,
+                    "allow_create_engine": False,
+                    "allow_sampling": True,
+                    "allow_logprobs": True,
+                    "allow_search_indices": False,
+                    "allow_view": True,
+                    "allow_fine_tuning": False,
+                    "organization": "*",
+                    "group": None,
+                    "is_blocking": False
+                }
+            ],
+            "root": model_name,
+            "parent": None
+        })
+    
+    return {
+        "object": "list",
+        "data": models
+    }
+
+
 @app.post('/v1/chat/completions')
 @app.post('/chat/completions')
 async def chat_completions(request: Request):
