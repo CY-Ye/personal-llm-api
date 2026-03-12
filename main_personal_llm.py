@@ -16,8 +16,9 @@ logger.add(
 )
 
 
-# 导入FastAPI
+# 导入 FastAPI
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
@@ -42,16 +43,28 @@ async def init_app():
     # 初始化模型
     await init_models()
 
-# 初始化
-asyncio.run(init_app())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI 生命周期管理器"""
+    # Startup
+    logger.info("Starting up: Initializing database and models...")
+    await init_app()
+    logger.info("Startup complete!")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down: Cleaning up resources...")
+    # 在这里添加清理逻辑，例如关闭数据库连接等
 
 
-
-# 创建FastAPI应用实例
+# 创建 FastAPI 应用实例
 app = FastAPI(
     docs_url=None,      # 禁用 Swagger UI
     redoc_url=None,     # 禁用 ReDoc
-    openapi_url=None    # 禁用 OpenAPI JSON
+    openapi_url=None,   # 禁用 OpenAPI JSON
+    lifespan=lifespan   # 使用 lifespan 管理生命周期
 )
 
 app.add_middleware(

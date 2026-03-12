@@ -26,5 +26,9 @@ VOLUME ["/app/logs", "/app/data"]
 # 暴露服务端口
 EXPOSE 2321
 
-# 启动命令
-CMD ["python3", "main_personal_llm.py"]
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 使用 uvicorn 启动 FastAPI 应用（生产环境推荐方式）
+CMD ["uvicorn", "main_personal_llm:app", "--host", "0.0.0.0", "--port", "2321", "--workers", "1"]
