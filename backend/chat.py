@@ -1,5 +1,6 @@
-
 import json
+from datetime import datetime
+from typing import List
 
 from fastapi import APIRouter, Depends, Request
 
@@ -10,10 +11,33 @@ router = APIRouter(prefix="/backend/chat", tags=["chat"])
 
 @router.get("/chat-history")
 @require_auth
-async def chat_history(request: Request, params: PaginationParams = Depends(get_page_params)):
+async def chat_history(
+    request: Request, 
+    params: PaginationParams = Depends(get_page_params),
+    model_name: str = None,
+    date_range: str = None
+):
+    # 构建过滤条件
+    where_clauses = []
+    
+    if model_name:
+        where_clauses.append(f"model_name = '{model_name}'")
+    
+    if date_range:
+        # date_range 格式为 "2024-01-01,2024-01-31"
+        dates = date_range.split(',')
+        if len(dates) == 2:
+            start_time = dates[0].strip()
+            end_time = dates[1].strip()
+            where_clauses.append(f"create_time >= '{start_time} 00:00:00'")
+            where_clauses.append(f"create_time <= '{end_time} 23:59:59'")
+    
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+    
     # 分页查询
-
-    sql = f"""SELECT * FROM llm_chat_history ORDER BY id DESC LIMIT {(params.page - 1) * params.perPage},{params.perPage}"""
+    sql = f"""SELECT * FROM llm_chat_history {where_sql} ORDER BY id DESC LIMIT {(params.page - 1) * params.perPage},{params.perPage}"""
 
     data_list = await db_client.select(sql)
 
@@ -59,10 +83,27 @@ async def chat_history(request: Request, params: PaginationParams = Depends(get_
                 context_item['role'] = 'function'
                 context_item['content'] = json.dumps(context_item['function'], ensure_ascii=False, indent=4)
 
-    sql = 'select count(1) as cou from llm_chat_history'
+    # 统计总数
+    sql = f'select count(1) as cou from llm_chat_history {where_sql}'
     total = await db_client.select(sql)
     total = total[0]['cou']
 
     data = {'status':0, 'msg':'', 'data':{'count':total, 'rows':res}}
     return data
 
+@router.get("/list-model")
+@require_auth
+async def list_model(request: Request):
+    sql = f'select model_name from llm_model where status=1'
+    model_list = await db_client.select(sql)
+    
+    options = [{"label": item['model_name'], "value": item['model_name']} for item in model_list]
+    
+    data = {
+        'status': 0,
+        'msg': '',
+        'data': {
+            'options': options
+        }
+    }
+    return data
