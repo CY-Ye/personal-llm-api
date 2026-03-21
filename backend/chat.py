@@ -58,8 +58,16 @@ async def chat_history(
         item['total_price'] = f"{item['total_price']:.6g} 元"
         item['context'] = json.loads(item['context'])
         item['context'].append({'role': 'assistant', 'content': item['answer']})
+        
+        # 处理耗时信息：流式请求显示 "首字/总"，非流式显示 "无/总"
         if item['update_time'] and item['create_time']:
-            item['duration'] = str(int((item['update_time'] - item['create_time']).total_seconds())) + ' s'
+            total_duration = str(int((item['update_time'] - item['create_time']).total_seconds())) + 's'
+            # 如果有 ttft_ms 字段且大于 0，说明是流式请求
+            if item.get('ttft_ms') and item['ttft_ms'] > 0:
+                ttft_seconds = round(item['ttft_ms'] / 1000, 2)
+                item['duration'] = f"{ttft_seconds}s/{total_duration}"
+            else:
+                item['duration'] = f"- / {total_duration}"
         item['create_time'] = item['create_time'].strftime('%Y-%m-%d %H:%M:%S')
 
         for context_item in item['context']:

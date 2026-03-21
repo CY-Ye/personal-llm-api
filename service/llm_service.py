@@ -70,8 +70,8 @@ class LLMService(object):
         await db_client.insert('llm_chat_history', history)
         return history
 
-    async def update_tokens(self, history, response):
-        # 更新tokens
+    async def update_tokens(self, history, response, ttft_ms=None):
+        # 更新 tokens
         reasoning_content = response['choices'][0]['message'].get('reasoning_content', '')
         if reasoning_content:
             reasoning_content = f'<think>\n{reasoning_content}\n</think>\n'
@@ -98,6 +98,10 @@ class LLMService(object):
             update_data['answer'] += json.dumps(response['choices'][0]['message']['tool_calls'], ensure_ascii=False, indent=4)
         current_timestamp = get_current_timestamp()
         update_data['update_time'] = current_timestamp[0:-4]
+        
+        # 记录首字延迟（如果是流式请求）
+        if ttft_ms is not None and ttft_ms > 0:
+            update_data['ttft_ms'] = ttft_ms
 
         await db_client.update('llm_chat_history', update_data, f'id={history["id"]}')
 
@@ -157,7 +161,7 @@ class LLMService(object):
         logger = Logger(self.model_name, id)
         logger.info(f"chat start")
 
-        # httpx异步请求
+        # httpx 异步请求
         usage = None
         content = []
         reasoning_content = []
@@ -168,6 +172,10 @@ class LLMService(object):
             for key, value in self.default_params.items():
                 if key not in params:
                     params[key] = value
+
+        # 记录首字时间
+        first_token_time = None
+        start_time = time.time()
 
         async with httpx.AsyncClient(**settings.HTTPX_PARAMS) as client:
             async with client.stream("POST", self.chat_url, json=params, headers=self.stream_headers) as response:
@@ -202,6 +210,13 @@ class LLMService(object):
                     if chunk['choices']:
                         if 'content' not in chunk['choices'][0]['delta']:
                             chunk['choices'][0]['delta']['content'] = ''
+                        
+                        # 记录首字时间（第一次收到内容时）
+                        if first_token_time is None and (chunk['choices'][0]['delta'].get('content') or 
+                                                         chunk['choices'][0]['delta'].get('reasoning_content') or 
+                                                         chunk['choices'][0]['delta'].get('reasoning')):
+                            first_token_time = time.time()
+                        
                         if chunk['choices'][0]['delta']['content']:
                             content.append(chunk['choices'][0]['delta']['content'])
                         if chunk['choices'][0]['delta'].get('reasoning_content', ''):
@@ -209,7 +224,7 @@ class LLMService(object):
                         if chunk['choices'][0]['delta'].get('reasoning', ''):
                             reasoning_content.append(chunk['choices'][0]['delta']['reasoning'])
 
-                        # 输出图片base64保存
+                        # 输出图片 base64 保存
                         for image in chunk['choices'][0]['delta'].get('images', []):
                             if image['type'] == 'image_url':
                                 img_path = save_base64_image(image['image_url']['url'].split(',')[1])
@@ -245,7 +260,12 @@ class LLMService(object):
         if reasoning_content:
             response['choices'][0]['message']['reasoning_content'] = ''.join(reasoning_content)
 
-        await self.update_tokens(history, response)
+        # 计算首字延迟
+        ttft_ms = None
+        if first_token_time:
+            ttft_ms = int((first_token_time - start_time) * 1000)
+        
+        await self.update_tokens(history, response, ttft_ms)
         logger.info(f"chat end")
 
 

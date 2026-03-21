@@ -34,7 +34,7 @@
       },
       {
         "name": "duration",
-        "label": "耗时"
+        "label": "耗时（首字/总）"
       },
       {
         "type": "operation",
