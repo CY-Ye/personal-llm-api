@@ -107,3 +107,21 @@ async def list_model(request: Request):
         }
     }
     return data
+
+@router.get("/list-providers")
+@require_auth
+async def list_providers(request: Request):
+    sql = 'SELECT DISTINCT provider_english_name as provider_name FROM llm_model WHERE status=1'
+    provider_list = await db_client.select(sql)
+    
+    options = [{"label": item['provider_name'], "value": item['provider_name']} 
+               for item in provider_list]
+    
+    data = {
+        'status': 0,
+        'msg': '',
+        'data': {
+            'options': options
+        }
+    }
+    return data
