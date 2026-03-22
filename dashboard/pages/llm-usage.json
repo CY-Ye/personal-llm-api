@@ -149,17 +149,12 @@
                     }
                 },
                 {
+                    "label": "前",
                     "type": "input-text",
                     "name": "before_num",
                     "value": "7",
                     "visibleOn": "data.date_range_type === 'relative'",
                     "clearable": true
-                },
-                {
-                    "type": "tpl",
-                    "tpl": "前",
-                    "className": "text-lg mx-3",
-                    "visibleOn": "data.date_range_type === 'relative'"
                 },
                 {
                     "type": "select",
