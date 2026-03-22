@@ -1,6 +1,7 @@
 import json
 import time
 import copy
+import datetime
 
 import httpx
 from fastapi.exceptions import HTTPException
@@ -66,6 +67,10 @@ class LLMService(object):
         history['create_day'] = current_timestamp[0:10]
         history['create_month'] = current_timestamp[0:7]
         history['create_year'] = current_timestamp[0:4]
+        # 添加小时和分钟维度字段
+        now = datetime.datetime.now()
+        history['create_hour'] = now.strftime('%Y-%m-%d %H')
+        history['create_minute'] = now.strftime('%Y-%m-%d %H:%M')
 
         await db_client.insert('llm_chat_history', history)
         return history

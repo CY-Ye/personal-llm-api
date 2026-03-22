@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, field_validator
 
-from utils.util import get_before_timestamp, get_before_month, require_auth, get_before_day, get_current_timestamp
+from utils.util import get_before_timestamp, get_before_month, require_auth, get_current_timestamp, get_before_day, get_current_timestamp, get_before_hour, get_before_minute
 from utils.db_client import db_client
 
 router = APIRouter(prefix="/backend/llm-usage", tags=["backend-llm-usage"])
@@ -25,8 +25,8 @@ class ChartBase(BaseModel):
         """时间单位格式验证"""
         if not v:
             v = 'day'
-        if v not in ['day', 'month', 'year']:
-            raise ValueError('时间单位必须是day或month或year')
+        if v not in ['day', 'month', 'year', 'hour', 'minute']:
+            raise ValueError('时间单位必须是 day 或 month 或 year 或 hour 或 minute')
         return v
 
     @field_validator('before_num')
@@ -88,9 +88,13 @@ def build_where_conditions(params: ChartBase) -> tuple[str, str]:
             date_str = get_before_day(before_num - 1) + ' 00:00:00'
         elif params.unit_type == 'month':
             date_str = get_before_month(before_num - 1) + ' 00:00:00'
-        else:
+        elif params.unit_type == 'year':
             current_year = get_current_timestamp()[:4]
             date_str = f'{int(current_year) - before_num + 1}-01-01 00:00:00'
+        elif params.unit_type == 'hour':
+            date_str = get_before_hour(before_num - 1).replace(' ', ' ') + ':00:00'
+        elif params.unit_type == 'minute':
+            date_str = get_before_minute(before_num - 1).replace(' ', ' ') + ':00'
         
         if date_str:
             where_clauses.append(f"create_time >= '{date_str}'")
@@ -126,12 +130,44 @@ def get_day_params(params):
     format_str = '%Y-%m-%d'
     for i in range(params.before_num - 1, -1, -1):
         time_stamp = get_before_timestamp(i)
-        # 格式化time_stamp时间戳
+        # 格式化 time_stamp 时间戳
         xAxis.append(datetime.datetime.fromtimestamp(time_stamp).strftime(format_str))
         yAxis.append(0)
     date_str = get_before_day(params.before_num - 1) + ' 00:00:00'
     search_column_name = 'create_day'
 
+    return xAxis, yAxis, date_str, search_column_name
+
+def get_hour_params(params):
+    """获取小时级别的图表参数"""
+    xAxis = []
+    yAxis = []
+    
+    format_str = '%Y-%m-%d %H'
+    for i in range(params.before_num - 1, -1, -1):
+        hour_str = get_before_hour(i)
+        xAxis.append(hour_str)
+        yAxis.append(0)
+    
+    date_str = get_before_hour(params.before_num - 1) + ':00:00'
+    search_column_name = 'create_hour'
+    
+    return xAxis, yAxis, date_str, search_column_name
+
+def get_minute_params(params):
+    """获取分钟级别的图表参数"""
+    xAxis = []
+    yAxis = []
+    
+    format_str = '%Y-%m-%d %H:%M'
+    for i in range(params.before_num - 1, -1, -1):
+        minute_str = get_before_minute(i)
+        xAxis.append(minute_str)
+        yAxis.append(0)
+    
+    date_str = get_before_minute(params.before_num - 1) + ':00'
+    search_column_name = 'create_minute'
+    
     return xAxis, yAxis, date_str, search_column_name
 
 def get_month_params(params):
@@ -156,6 +192,7 @@ def get_year_params(params):
 
         xAxis.append(str(int(current_year) - i))
         yAxis.append(0)
+    current_year = get_current_timestamp()[:4]
     date_str = f'{int(current_year) - params.before_num + 1}-01-01 00:00:00'
     search_column_name = 'create_year'
 
@@ -190,10 +227,18 @@ async def chart_request(request: Request, params: ChartBase = Depends(get_chart_
         # 使用原有的 before_num 逻辑
         if params.unit_type == 'day':
             xAxis, yAxis, _, search_column_name = get_day_params(params)
+
         elif params.unit_type == 'month':
             xAxis, yAxis, _, search_column_name = get_month_params(params)
-        else:
+
+        elif params.unit_type == 'year':
             xAxis, yAxis, _, search_column_name = get_year_params(params)
+        
+        elif params.unit_type == 'hour':
+            xAxis, yAxis, _, search_column_name = get_hour_params(params)
+        
+        elif params.unit_type == 'minute':
+            xAxis, yAxis, _, search_column_name = get_minute_params(params)
 
     # 使用动态 WHERE 条件
     where_sql, _ = build_where_conditions(params)
@@ -299,7 +344,7 @@ async def chart_token(request: Request, params: ChartBase = Depends(get_chart_pa
             date_str = get_before_month(params.before_num - 1) + ' 00:00:00'
             search_column_name = 'create_month'
 
-        else:
+        elif params.unit_type == 'year':
             for i in range(params.before_num - 1, -1, -1):
                 current_year = get_current_timestamp()[:4]
 
@@ -307,7 +352,14 @@ async def chart_token(request: Request, params: ChartBase = Depends(get_chart_pa
                 yAxis_prompt.append(0)
                 yAxis_completion.append(0)
             search_column_name = 'create_year'
-
+        
+        elif params.unit_type == 'hour':
+            xAxis, yAxis_prompt, _, search_column_name = get_hour_params(params)
+            yAxis_completion = [0] * len(xAxis)
+        
+        elif params.unit_type == 'minute':
+            xAxis, yAxis_prompt, _, search_column_name = get_minute_params(params)
+            yAxis_completion = [0] * len(xAxis)
     # 使用动态 WHERE 条件
     where_sql, _ = build_where_conditions(params)
 

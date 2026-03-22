@@ -61,8 +61,28 @@ def get_before_month(months):
             year -= 1
     # 获取指定月份的第一天
     first_day = datetime.datetime(year, month, 1)
-    # 计算指定月份的0点时间
+    # 计算指定月份的 0 点时间
     return first_day.strftime('%Y-%m-%d')
+
+def get_before_hour(hours):
+    """
+    获取指定小时前的小时时间字符串（格式：YYYY-MM-DD HH）
+    :param hours: 多少小时前
+    :return: 格式化的小时字符串
+    """
+    now = datetime.datetime.now()
+    before_time = now - datetime.timedelta(hours=int(hours))
+    return before_time.strftime('%Y-%m-%d %H')
+
+def get_before_minute(minutes):
+    """
+    获取指定分钟前的分钟时间字符串（格式：YYYY-MM-DD HH:MM）
+    :param minutes: 多少分钟前
+    :return: 格式化的分钟字符串
+    """
+    now = datetime.datetime.now()
+    before_time = now - datetime.timedelta(minutes=int(minutes))
+    return before_time.strftime('%Y-%m-%d %H:%M')
 
 def md5_encrypt(string: str) -> str:
     """
@@ -296,6 +316,3 @@ query如下：
         raise HTTPException(status_code=400, detail="分辨率")
 
     return img_params
-
-if __name__ == '__main__':
-    print(resize_to_4k_limit(1408, 768))
