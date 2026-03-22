@@ -62,6 +62,7 @@ create table if not exists llm_chat_history
     completion_tokens INT      default 0                 null,
     input_price       FLOAT default 0                 null,
     output_price      FLOAT default 0                 null,
+    ttft_ms           INT      default 0                 null,
     create_time       DATETIME default CURRENT_TIMESTAMP null,
     create_day        VARCHAR(10)                           null,
     create_month      VARCHAR(7)                            null,

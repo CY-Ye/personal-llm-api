@@ -4,12 +4,24 @@
         {
             "type": "form",
             "title": "LLM 使用量",
-            "target": "chart_request,chart_token,chart_money",
+            "target": "chart_request,chart_token,chart_money,total_usage_service",
             "mode": "inline",
             "body": [
                 {
                   "type": "service",
-                  "api": "get:/backend/llm-usage/total-usage",
+                  "name": "total_usage_service",
+                  "api": {
+                    "url": "/backend/llm-usage/total-usage",
+                    "method": "get",
+                    "data": {
+                      "&before_num": "${date_range_type === 'relative' ? before_num : undefined}",
+                      "&unit_type": "${date_range_type === 'relative' ? unit_type : undefined}",
+                      "&start_date": "${date_range_type === 'absolute' ? start_date : undefined}",
+                      "&end_date": "${date_range_type === 'absolute' ? end_date : undefined}",
+                      "model_name": "$model_name",
+                      "provider_name": "$provider_name"
+                    }
+                  },
                   "body": [
                     {
                       "type": "flex",
@@ -102,14 +114,47 @@
                   ]
                 },
                 {
-                  "type": "tpl",
-                  "tpl": "前",
-                  "className": "text-lg mx-3"
+                    "type": "radios",
+                    "name": "date_range_type",
+                    "value": "relative",
+                    "options": [
+                        {
+                            "label": "相对时间",
+                            "value": "relative"
+                        },
+                        {
+                            "label": "日期范围",
+                            "value": "absolute"
+                        }
+                    ],
+                    "mode": "inline",
+                    "className": "mb-3",
+                    "onEvent": {
+                        "change": {
+                            "actions": [
+                                {
+                                    "actionType": "clear",
+                                    "args": {
+                                        "key": "start_date"
+                                    }
+                                },
+                                {
+                                    "actionType": "clear",
+                                    "args": {
+                                        "key": "end_date"
+                                    }
+                                }
+                            ]
+                        }
+                    }
                 },
                 {
+                    "label": "前",
                     "type": "input-text",
                     "name": "before_num",
-                    "value": "7"
+                    "value": "7",
+                    "visibleOn": "data.date_range_type === 'relative'",
+                    "clearable": true
                 },
                 {
                     "type": "select",
@@ -128,7 +173,52 @@
                             "label": "年",
                             "value": "year"
                         }
-                    ]
+                    ],
+                    "visibleOn": "data.date_range_type === 'relative'",
+                    "clearable": true
+                },
+                {
+                    "type": "input-date",
+                    "name": "start_date",
+                    "label": "开始",
+                    "mode": "inline",
+                    "placeholder": "选择开始日期",
+                    "value": "",
+                    "visibleOn": "data.date_range_type === 'absolute'",
+                    "clearable": true,
+                    "format": "YYYY-MM-DD",
+                    "inputFormat": "YYYY-MM-DD"
+                },
+                {
+                    "type": "input-date",
+                    "name": "end_date",
+                    "label": "结束",
+                    "mode": "inline",
+                    "placeholder": "选择结束日期",
+                    "value": "",
+                    "visibleOn": "data.date_range_type === 'absolute'",
+                    "clearable": true,
+                    "format": "YYYY-MM-DD",
+                    "inputFormat": "YYYY-MM-DD"
+                },
+                {
+                    "type": "select",
+                    "name": "provider_name",
+                    "label": "服务商",
+                    "mode": "inline",
+                    "source": "get:/backend/chat/list-providers",
+                    "clearable": true,
+                    "autoFill": {
+                        "model_name": ""
+                    }
+                },
+                {
+                    "type": "select",
+                    "name": "model_name",
+                    "label": "模型",
+                    "mode": "inline",
+                    "source": "get:/backend/chat/list-model",
+                    "clearable": true
                 },
                 {
                     "type": "submit",
@@ -150,8 +240,12 @@
                                 "url": "/backend/llm-usage/chart-request",
                                 "method": "get",
                                 "data": {
-                                    "before_num": "$before_num",
-                                    "unit_type": "$unit_type"
+                                    "&before_num": "${date_range_type === 'relative' ? before_num : undefined}",
+                                    "&unit_type": "${date_range_type === 'relative' ? unit_type : undefined}",
+                                    "&start_date": "${date_range_type === 'absolute' ? start_date : undefined}",
+                                    "&end_date": "${date_range_type === 'absolute' ? end_date : undefined}",
+                                    "model_name": "$model_name",
+                                    "provider_name": "$provider_name"
                                 }
                             }
                         }
@@ -166,8 +260,12 @@
                                 "url": "/backend/llm-usage/chart-token",
                                 "method": "get",
                                 "data": {
-                                    "before_num": "$before_num",
-                                    "unit_type": "$unit_type"
+                                    "&before_num": "${date_range_type === 'relative' ? before_num : undefined}",
+                                    "&unit_type": "${date_range_type === 'relative' ? unit_type : undefined}",
+                                    "&start_date": "${date_range_type === 'absolute' ? start_date : undefined}",
+                                    "&end_date": "${date_range_type === 'absolute' ? end_date : undefined}",
+                                    "model_name": "$model_name",
+                                    "provider_name": "$provider_name"
                                 }
                             }
                         }
@@ -187,8 +285,12 @@
                                 "url": "/backend/llm-usage/chart-money",
                                 "method": "get",
                                 "data": {
-                                    "before_num": "$before_num",
-                                    "unit_type": "$unit_type"
+                                    "&before_num": "${date_range_type === 'relative' ? before_num : undefined}",
+                                    "&unit_type": "${date_range_type === 'relative' ? unit_type : undefined}",
+                                    "&start_date": "${date_range_type === 'absolute' ? start_date : undefined}",
+                                    "&end_date": "${date_range_type === 'absolute' ? end_date : undefined}",
+                                    "model_name": "$model_name",
+                                    "provider_name": "$provider_name"
                                 }
                             }
                         }

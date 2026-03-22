@@ -1,5 +1,6 @@
-
 import json
+from datetime import datetime
+from typing import List
 
 from fastapi import APIRouter, Depends, Request
 
@@ -10,10 +11,33 @@ router = APIRouter(prefix="/backend/chat", tags=["chat"])
 
 @router.get("/chat-history")
 @require_auth
-async def chat_history(request: Request, params: PaginationParams = Depends(get_page_params)):
+async def chat_history(
+    request: Request, 
+    params: PaginationParams = Depends(get_page_params),
+    model_name: str = None,
+    date_range: str = None
+):
+    # 构建过滤条件
+    where_clauses = []
+    
+    if model_name:
+        where_clauses.append(f"model_name = '{model_name}'")
+    
+    if date_range:
+        # date_range 格式为 "2024-01-01,2024-01-31"
+        dates = date_range.split(',')
+        if len(dates) == 2:
+            start_time = dates[0].strip()
+            end_time = dates[1].strip()
+            where_clauses.append(f"create_time >= '{start_time} 00:00:00'")
+            where_clauses.append(f"create_time <= '{end_time} 23:59:59'")
+    
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+    
     # 分页查询
-
-    sql = f"""SELECT * FROM llm_chat_history ORDER BY id DESC LIMIT {(params.page - 1) * params.perPage},{params.perPage}"""
+    sql = f"""SELECT * FROM llm_chat_history {where_sql} ORDER BY id DESC LIMIT {(params.page - 1) * params.perPage},{params.perPage}"""
 
     data_list = await db_client.select(sql)
 
@@ -34,8 +58,16 @@ async def chat_history(request: Request, params: PaginationParams = Depends(get_
         item['total_price'] = f"{item['total_price']:.6g} 元"
         item['context'] = json.loads(item['context'])
         item['context'].append({'role': 'assistant', 'content': item['answer']})
+        
+        # 处理耗时信息：流式请求显示 "首字/总"，非流式显示 "无/总"
         if item['update_time'] and item['create_time']:
-            item['duration'] = str(int((item['update_time'] - item['create_time']).total_seconds())) + ' s'
+            total_duration = str(int((item['update_time'] - item['create_time']).total_seconds())) + 's'
+            # 如果有 ttft_ms 字段且大于 0，说明是流式请求
+            if item.get('ttft_ms') and item['ttft_ms'] > 0:
+                ttft_seconds = round(item['ttft_ms'] / 1000, 2)
+                item['duration'] = f"{ttft_seconds}s/{total_duration}"
+            else:
+                item['duration'] = f"- / {total_duration}"
         item['create_time'] = item['create_time'].strftime('%Y-%m-%d %H:%M:%S')
 
         for context_item in item['context']:
@@ -59,10 +91,45 @@ async def chat_history(request: Request, params: PaginationParams = Depends(get_
                 context_item['role'] = 'function'
                 context_item['content'] = json.dumps(context_item['function'], ensure_ascii=False, indent=4)
 
-    sql = 'select count(1) as cou from llm_chat_history'
+    # 统计总数
+    sql = f'select count(1) as cou from llm_chat_history {where_sql}'
     total = await db_client.select(sql)
     total = total[0]['cou']
 
     data = {'status':0, 'msg':'', 'data':{'count':total, 'rows':res}}
     return data
 
+@router.get("/list-model")
+@require_auth
+async def list_model(request: Request):
+    sql = f'select model_name from llm_model where status=1'
+    model_list = await db_client.select(sql)
+    
+    options = [{"label": item['model_name'], "value": item['model_name']} for item in model_list]
+    
+    data = {
+        'status': 0,
+        'msg': '',
+        'data': {
+            'options': options
+        }
+    }
+    return data
+
+@router.get("/list-providers")
+@require_auth
+async def list_providers(request: Request):
+    sql = 'SELECT DISTINCT provider_english_name as provider_name FROM llm_model WHERE status=1'
+    provider_list = await db_client.select(sql)
+    
+    options = [{"label": item['provider_name'], "value": item['provider_name']} 
+               for item in provider_list]
+    
+    data = {
+        'status': 0,
+        'msg': '',
+        'data': {
+            'options': options
+        }
+    }
+    return data
