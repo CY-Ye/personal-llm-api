@@ -14,7 +14,15 @@ class QwenLLMService(LLMService):
     # 获取usage
     async def get_usage(self, response, params, answer):
         if response['usage']:
-            return {'completion_tokens': response['usage']['completion_tokens'], 'prompt_tokens': response['usage']['prompt_tokens'], 'total_tokens': response['usage']['total_tokens']}
+            cached_tokens = self._extract_cached_tokens(response['usage'])
+            cached_price = self.cached_unit_price * (cached_tokens / 1000) if cached_tokens > 0 and self.cached_unit_price > 0 else 0
+            return {
+                'completion_tokens': response['usage']['completion_tokens'],
+                'prompt_tokens': response['usage']['prompt_tokens'],
+                'total_tokens': response['usage']['total_tokens'],
+                'cached_tokens': cached_tokens,
+                'cached_price': cached_price
+            }
         else:
             query = [msg['content'] for msg in params['messages'] if 'content' in msg]
 
@@ -30,6 +38,8 @@ class QwenLLMService(LLMService):
             data['prompt_tokens'] = len(query_token)
             data['completion_tokens'] = len(answer_token)
             data['total_tokens'] = data['prompt_tokens'] + data['completion_tokens']
+            data['cached_tokens'] = 0
+            data['cached_price'] = 0
             return data
 
 

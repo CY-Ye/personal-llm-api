@@ -119,6 +119,7 @@ async def init_models():
         params['input_unit_price'] = model['input_unit_price']
         params['output_unit_price'] = model['output_unit_price']
         params['default_params'] = model['default_params']
+        params['cached_unit_price'] = model.get('cached_unit_price', 0)
 
         if 'ark.cn-beijing.volces.com' in model['base_url']:
             # seedream 模型

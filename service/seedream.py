@@ -29,11 +29,21 @@ class SeedreamLLMService(LLMService):
             update_data['prompt_tokens'] = response['usage']['prompt_tokens']
             update_data['input_price'] = self.input_unit_price * (response['usage']['prompt_tokens'] / 1000)
             update_data['output_price'] = self.output_unit_price * img_num
+            # Handle cached_tokens - compute if not provided by API
+            if 'cached_tokens' in response['usage']:
+                update_data['cached_tokens'] = response['usage']['cached_tokens']
+                update_data['cached_price'] = response['usage'].get('cached_price', 0)
+            else:
+                cached_tokens = self._extract_cached_tokens(response['usage'])
+                update_data['cached_tokens'] = cached_tokens
+                update_data['cached_price'] = self.cached_unit_price * (cached_tokens / 1000) if cached_tokens > 0 and self.cached_unit_price > 0 else 0
         else:
             update_data['completion_tokens'] = 0
             update_data['prompt_tokens'] = 0
             update_data['input_price'] = 0
             update_data['output_price'] = 0
+            update_data['cached_tokens'] = 0
+            update_data['cached_price'] = 0
 
         if not response['choices'][0]['message']['content']:
             response['choices'][0]['message']['content'] = ''

@@ -511,6 +511,156 @@ async def chart_money(request: Request, params: ChartBase = Depends(get_chart_pa
     data = {'status': 0, 'msg': '', 'data': data}
     return data
 
+# 获取缓存 Token 图表数据
+@router.get("/chart-cached-token")
+@require_auth
+async def chart_cached_token(request: Request, params: ChartBase = Depends(get_chart_params)):
+
+    xAxis = []
+    yAxis_cached = []
+    yAxis_total = []
+    yAxis_rate = []
+
+    # 如果使用了日期范围筛选（只要有 start_date 就进入日期范围模式）
+    has_start_date = params.start_date and params.start_date.strip()
+    
+    if has_start_date:
+        search_column_name = 'create_day'
+        where_sql, _ = build_where_conditions(params)
+        
+        # 先查询所有存在的日期
+        date_sql = f"""
+            SELECT DISTINCT {search_column_name}
+            FROM llm_chat_history
+            {where_sql}
+            ORDER BY {search_column_name}
+        """
+        date_res = await db_client.select(date_sql)
+        xAxis = [item[search_column_name] for item in date_res]
+        yAxis_cached = [0] * len(xAxis)
+        yAxis_total = [0] * len(xAxis)
+        yAxis_rate = [0] * len(xAxis)
+    else:
+        # 使用原有的 before_num 逻辑
+        if params.unit_type == 'day':
+            format_str = '%Y-%m-%d'
+            for i in range(params.before_num - 1, -1, -1):
+                time_stamp = get_before_timestamp(i)
+                xAxis.append(datetime.datetime.fromtimestamp(time_stamp).strftime(format_str))
+                yAxis_cached.append(0)
+                yAxis_total.append(0)
+                yAxis_rate.append(0)
+            search_column_name = 'create_day'
+
+        elif params.unit_type == 'month':
+            format_str = '%Y-%m'
+            for i in range(params.before_num - 1, -1, -1):
+                month_str = get_before_month(i)
+                xAxis.append(month_str)
+                yAxis_cached.append(0)
+                yAxis_total.append(0)
+                yAxis_rate.append(0)
+            search_column_name = 'create_month'
+
+        elif params.unit_type == 'year':
+            for i in range(params.before_num - 1, -1, -1):
+                current_year = get_current_timestamp()[:4]
+                xAxis.append(str(int(current_year) - i))
+                yAxis_cached.append(0)
+                yAxis_total.append(0)
+                yAxis_rate.append(0)
+            search_column_name = 'create_year'
+        
+        elif params.unit_type == 'hour':
+            xAxis, yAxis_cached, _, search_column_name = get_hour_params(params)
+            yAxis_total = [0] * len(xAxis)
+            yAxis_rate = [0] * len(xAxis)
+        
+        elif params.unit_type == 'minute':
+            xAxis, yAxis_cached, _, search_column_name = get_minute_params(params)
+            yAxis_total = [0] * len(xAxis)
+            yAxis_rate = [0] * len(xAxis)
+
+    # 使用动态 WHERE 条件
+    where_sql, _ = build_where_conditions(params)
+
+    sql = f"""
+        SELECT {search_column_name}, SUM(cached_tokens) AS cached_tokens, SUM(prompt_tokens) AS prompt_tokens
+        FROM llm_chat_history
+        {where_sql}
+        GROUP BY {search_column_name} order by {search_column_name}
+    """
+
+    res = await db_client.select(sql)
+    res = {item[search_column_name]: {'cached_tokens': item['cached_tokens'] or 0, 'prompt_tokens': item['prompt_tokens'] or 0} for item in res}
+
+    for i, name in enumerate(xAxis):
+        if name in res:
+            yAxis_cached[i] = res[name]['cached_tokens']
+            yAxis_total[i] = res[name]['prompt_tokens']
+            # 计算缓存命中率
+            if yAxis_total[i] > 0:
+                yAxis_rate[i] = round(yAxis_cached[i] / yAxis_total[i] * 100, 2)
+
+    data = {
+        "tooltip": {
+            "trigger": 'axis'
+        },
+        "legend": {
+            "data": ['缓存 Token', '总输入 Token', '缓存命中率']
+        },
+        "title": {
+            "text": '缓存 Token 统计',
+            "left": 'center',
+            "bottom": '0%',
+            "textStyle": {
+                "fontSize": 14,
+                "color": '#666'
+            }
+        },
+        "xAxis": {
+            "type": 'category',
+            "data": xAxis
+        },
+        "yAxis": [
+            {
+                "type": 'value',
+                "name": 'Token',
+                "axisLabel": {
+                    "formatter": '{value}'
+                }
+            },
+            {
+                "type": 'value',
+                "name": '命中率(%)',
+                "axisLabel": {
+                    "formatter": '{value}%'
+                }
+            }
+        ],
+        "series": [
+            {
+                "name": '缓存 Token',
+                "data": yAxis_cached,
+                "type": 'bar'
+            },
+            {
+                "name": '总输入 Token',
+                "data": yAxis_total,
+                "type": 'bar'
+            },
+            {
+                "name": '缓存命中率',
+                "data": yAxis_rate,
+                "type": 'line',
+                "yAxisIndex": 1
+            }
+        ]
+    }
+
+    data = {'status': 0, 'msg': '', 'data': data}
+    return data
+
 
 # 获取总使用情况
 @router.get("/total-usage")
@@ -542,7 +692,7 @@ async def total_usage(
         where_sql = "WHERE update_time is not null"
     
     sql = f"""
-        SELECT COUNT(1) AS total_request, SUM(prompt_tokens) AS prompt_tokens, SUM(completion_tokens) AS completion_tokens, SUM(input_price) AS input_price, SUM(output_price) AS output_price
+        SELECT COUNT(1) AS total_request, SUM(prompt_tokens) AS prompt_tokens, SUM(completion_tokens) AS completion_tokens, SUM(input_price) AS input_price, SUM(output_price) AS output_price, SUM(cached_tokens) AS cached_tokens, SUM(cached_price) AS cached_price
         FROM llm_chat_history
         {where_sql}
     """
@@ -554,18 +704,32 @@ async def total_usage(
         total_price = str(round(res['input_price'] + res['output_price'], 2))
         if total_price == '0.0':
             total_price = str(round(res['input_price'] + res['output_price'], 6))
+        
+        # 计算实际支付价格和节省率
+        actual_price = round((res['input_price'] or 0) + (res['output_price'] or 0) - (res['cached_price'] or 0), 6)
+        savings_price = res['cached_price'] or 0
+        input_price = res['input_price'] or 0
+        savings_rate = round(savings_price / input_price * 100, 2) if input_price > 0 else 0
 
         data = {
             'total_request': str(res['total_request']),
-            'total_tokens': str(res['prompt_tokens'] + res['completion_tokens']),
-            'total_price': total_price
+            'total_tokens': str((res['prompt_tokens'] or 0) + (res['completion_tokens'] or 0)),
+            'total_price': total_price,
+            'cached_tokens': str(res['cached_tokens'] or 0),
+            'cached_price': str(round(savings_price, 6)),
+            'actual_price': str(actual_price),
+            'savings_rate': str(savings_rate)
         }
 
     else:
         data = {
             'total_request': '0',
             'total_tokens': '0',
-            'total_price': '0.00'
+            'total_price': '0.00',
+            'cached_tokens': '0',
+            'cached_price': '0',
+            'actual_price': '0.00',
+            'savings_rate': '0'
         }
 
     data = {'status': 0, 'msg': '', 'data': data}

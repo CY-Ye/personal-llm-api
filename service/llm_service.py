@@ -13,8 +13,16 @@ from config import settings
 # 供应商模型接口基类
 class LLMService(object):
 
-    def __init__(self, id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params):
+    def __init__(self, id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params, cached_unit_price=0):
         self.id = id
+        self.base_url = base_url
+        self.key = api_key
+        self.provider_english_name = provider_english_name
+        self.model_name = model_name
+        self.model_id = model_id
+        self.input_unit_price = input_unit_price
+        self.output_unit_price = output_unit_price
+        self.cached_unit_price = cached_unit_price
         self.base_url_response = base_url + '/responses' if base_url[-1] != '/' else base_url + 'responses'
         self.chat_url = base_url + '/chat/completions' if base_url[-1] != '/' else base_url + 'chat/completions'
         self.base_url = base_url if base_url[-1] != '/' else base_url[:-1]
@@ -89,11 +97,21 @@ class LLMService(object):
             update_data['prompt_tokens'] = response['usage']['prompt_tokens']
             update_data['input_price'] = self.input_unit_price * (response['usage']['prompt_tokens'] / 1000)
             update_data['output_price'] = self.output_unit_price * (response['usage']['completion_tokens'] / 1000)
+            # Handle cached_tokens - compute if not provided by API
+            if 'cached_tokens' in response['usage']:
+                update_data['cached_tokens'] = response['usage']['cached_tokens']
+                update_data['cached_price'] = response['usage'].get('cached_price', 0)
+            else:
+                cached_tokens = self._extract_cached_tokens(response['usage'])
+                update_data['cached_tokens'] = cached_tokens
+                update_data['cached_price'] = self.cached_unit_price * (cached_tokens / 1000) if cached_tokens > 0 and self.cached_unit_price > 0 else 0
         else:
             update_data['completion_tokens'] = 0
             update_data['prompt_tokens'] = 0
             update_data['input_price'] = 0
             update_data['output_price'] = 0
+            update_data['cached_tokens'] = 0
+            update_data['cached_price'] = 0
 
         if not response['choices'][0]['message']['content']:
             response['choices'][0]['message']['content'] = ''
@@ -371,9 +389,23 @@ class LLMService(object):
     # 获取usage
     async def get_usage(self, response, params, answer):
         if response['usage']:
-            return {'completion_tokens': response['usage']['completion_tokens'], 'prompt_tokens': response['usage']['prompt_tokens'], 'total_tokens': response['usage']['total_tokens']}
+            cached_tokens = self._extract_cached_tokens(response['usage'])
+            cached_price = self.cached_unit_price * (cached_tokens / 1000) if cached_tokens > 0 and self.cached_unit_price > 0 else 0
+            return {
+                'completion_tokens': response['usage']['completion_tokens'],
+                'prompt_tokens': response['usage']['prompt_tokens'],
+                'total_tokens': response['usage']['total_tokens'],
+                'cached_tokens': cached_tokens,
+                'cached_price': cached_price
+            }
         else:
-            return {'completion_tokens': 0, 'prompt_tokens': 0, 'total_tokens': 0}
+            return {'completion_tokens': 0, 'prompt_tokens': 0, 'total_tokens': 0, 'cached_tokens': 0, 'cached_price': 0}
+
+    def _extract_cached_tokens(self, usage):
+        """提取缓存命中的 token 数"""
+        if 'prompt_tokens_details' in usage and 'cached_tokens' in usage['prompt_tokens_details']:
+            return usage['prompt_tokens_details']['cached_tokens']
+        return 0
 
     # 根据不同的供应商参数进行个性化处理
     async def handle_params(self, params):

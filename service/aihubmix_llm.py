@@ -15,8 +15,8 @@ from config import settings
 # https://docs.aihubmix.com/cn
 class AihubmixLLMService(LLMService):
 
-    def __init__(self, id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params):
-        super().__init__(id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params)
+    def __init__(self, id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params, cached_unit_price=0):
+        super().__init__(id, base_url, model_id, api_key, provider_english_name, model_name, input_unit_price, output_unit_price, default_params, cached_unit_price)
         
         if settings.AIHUBMIX_DISCOUNT_CODE:
             self.headers['APP-Code'] = settings.AIHUBMIX_DISCOUNT_CODE

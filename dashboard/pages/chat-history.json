@@ -22,7 +22,11 @@
       },
       {
         "name": "prompt_tokens",
-        "label": "输入/输出 token"
+        "label": "输入 token"
+      },
+      {
+        "name": "cached_tokens",
+        "label": "缓存 token"
       },
       {
         "name": "total_price",

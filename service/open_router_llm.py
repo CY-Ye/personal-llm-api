@@ -28,7 +28,16 @@ class OpenRouterLLMService(LLMService):
                     image_tokens = response['usage']['completion_tokens_details']['image_tokens']
                     completion_tokens += image_tokens * rate
 
-            return {'completion_tokens': completion_tokens, 'prompt_tokens': response['usage']['prompt_tokens'], 'total_tokens': response['usage']['prompt_tokens'] + completion_tokens}
+            cached_tokens = self._extract_cached_tokens(response['usage'])
+            cached_price = self.cached_unit_price * (cached_tokens / 1000) if cached_tokens > 0 and self.cached_unit_price > 0 else 0
+
+            return {
+                'completion_tokens': completion_tokens,
+                'prompt_tokens': response['usage']['prompt_tokens'],
+                'total_tokens': response['usage']['prompt_tokens'] + completion_tokens,
+                'cached_tokens': cached_tokens,
+                'cached_price': cached_price
+            }
         else:
             payload = {
                 "id": params['id']
@@ -48,6 +57,8 @@ class OpenRouterLLMService(LLMService):
             data['prompt_tokens'] = res['data']['tokens_prompt']
             data['completion_tokens'] = res['data']['tokens_completion']
             data['total_tokens'] = data['prompt_tokens'] + data['completion_tokens']
+            data['cached_tokens'] = 0
+            data['cached_price'] = 0
             return data
 
 
